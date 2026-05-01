@@ -21,9 +21,9 @@ def check_pass(pwd, hashed):
 # =========================
 def check_teacher_exists(username):
     try:
-        response = supabase.table("teachers").select("username").eq("username", username).execute()
-        return len(response.data) > 0
-    except Exception:
+        res = supabase.table("teachers").select("username").eq("username", username).execute()
+        return len(res.data) > 0
+    except:
         return False
 
 
@@ -42,13 +42,13 @@ def create_teacher(username, password, name):
 
 def teacher_login(username, password):
     try:
-        response = supabase.table("teachers").select("*").eq("username", username).execute()
+        res = supabase.table("teachers").select("*").eq("username", username).execute()
 
-        if response.data:
-            teacher = response.data[0]
+        if res.data:
+            teacher = res.data[0]
 
             if check_pass(password, teacher.get("password")):
-                return teacher
+                return teacher   # ✅ MUST return full object (includes id)
 
         return None
 
@@ -63,7 +63,7 @@ def teacher_login(username, password):
 def get_all_students():
     try:
         return supabase.table("students").select("*").execute().data or []
-    except Exception:
+    except:
         return []
 
 
@@ -85,6 +85,9 @@ def create_student(new_name, face_embedding=None, voice_embedding=None):
 # =========================
 def create_subject(subject_code, name, section, teacher_id):
     try:
+        if not teacher_id:
+            return []  # ✅ prevent UUID error
+
         data = {
             "subject_code": subject_code,
             "name": name,
@@ -99,31 +102,34 @@ def create_subject(subject_code, name, section, teacher_id):
 
 def get_teacher_subjects(teacher_id):
     try:
-        response = supabase.table("subjects") \
+        if not teacher_id:
+            return []  # ✅ FIX UUID crash
+
+        res = supabase.table("subjects") \
             .select("*") \
             .eq("teacher_id", teacher_id) \
             .execute()
 
-        subjects = response.data or []
+        subjects = res.data or []
 
         for sub in subjects:
-            subject_id = sub.get("id")
+            sid = sub.get("id")
 
-            # student count
+            # total students
             students = supabase.table("subject_students") \
-                .select("*") \
-                .eq("subject_id", subject_id) \
+                .select("id") \
+                .eq("subject_id", sid) \
                 .execute().data or []
 
             sub["total_students"] = len(students)
 
-            # attendance sessions
+            # total classes
             attendance = supabase.table("attendance") \
                 .select("timestamp") \
-                .eq("subject_id", subject_id) \
+                .eq("subject_id", sid) \
                 .execute().data or []
 
-            timestamps = [log.get("timestamp") for log in attendance if log.get("timestamp")]
+            timestamps = [a.get("timestamp") for a in attendance if a.get("timestamp")]
             sub["total_classes"] = len(set(timestamps))
 
         return subjects
@@ -138,6 +144,9 @@ def get_teacher_subjects(teacher_id):
 # =========================
 def enroll_student_to_subject(student_id, subject_id):
     try:
+        if not student_id or not subject_id:
+            return []
+
         data = {"student_id": student_id, "subject_id": subject_id}
         return supabase.table("subject_students").insert(data).execute().data
     except Exception as e:
@@ -159,8 +168,9 @@ def unenroll_student_to_subject(student_id, subject_id):
 
 def get_student_subjects(student_id):
     try:
+        # ✅ FIX: include subject data (important)
         return supabase.table("subject_students") \
-            .select("*") \
+            .select("*, subjects(*)") \
             .eq("student_id", student_id) \
             .execute().data or []
     except Exception as e:
@@ -173,13 +183,10 @@ def get_student_subjects(student_id):
 # =========================
 def get_student_attendance(student_id):
     try:
-        response = supabase.table("attendance") \
+        return supabase.table("attendance") \
             .select("*") \
             .eq("student_id", student_id) \
-            .execute()
-
-        return response.data or []
-
+            .execute().data or []
     except Exception as e:
         st.error(f"Attendance error: {e}")
         return []
@@ -187,6 +194,8 @@ def get_student_attendance(student_id):
 
 def create_attendance(logs):
     try:
+        if not logs:
+            return []
         return supabase.table("attendance").insert(logs).execute().data
     except Exception as e:
         st.error(f"Insert error: {e}")
@@ -195,6 +204,9 @@ def create_attendance(logs):
 
 def get_attendance_for_teacher(teacher_id):
     try:
+        if not teacher_id:
+            return []
+
         subjects = supabase.table("subjects") \
             .select("id") \
             .eq("teacher_id", teacher_id) \

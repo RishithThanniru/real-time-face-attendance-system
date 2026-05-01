@@ -69,6 +69,10 @@ def teacher_register_ui():
     password = st.text_input("Password", type="password")
 
     if st.button("Create Account"):
+        if not name or not username or not password:
+            st.warning("Fill all fields")
+            return
+
         if check_teacher_exists(username):
             st.error("Username already exists")
         else:
@@ -86,9 +90,21 @@ def teacher_register_ui():
 # DASHBOARD
 # =========================
 def teacher_dashboard():
-    teacher = st.session_state.teacher_data
+    teacher = st.session_state.get("teacher_data")
+
+    if not teacher:
+        st.error("Session expired. Please login again.")
+        st.session_state.clear()
+        st.rerun()
+
     teacher_id = teacher.get("id")
 
+    if not teacher_id:
+        st.error("Invalid teacher ID. Please login again.")
+        st.session_state.clear()
+        st.rerun()
+
+    # HEADER
     c1, c2 = st.columns(2)
 
     with c1:
@@ -102,7 +118,45 @@ def teacher_dashboard():
 
     st.divider()
 
-    if st.button("Create Subject"):
+    # NAVIGATION
+    if "page" not in st.session_state:
+        st.session_state.page = "subjects"
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        if st.button("📸 Take Attendance", key="btn_att"):
+            st.session_state.page = "attendance"
+
+    with c2:
+        if st.button("📚 Manage Subjects", key="btn_sub"):
+            st.session_state.page = "subjects"
+
+    with c3:
+        if st.button("📊 Attendance Records", key="btn_rec"):
+            st.session_state.page = "records"
+
+    st.divider()
+
+    # ROUTING
+    if st.session_state.page == "subjects":
+        show_subjects(teacher_id)
+
+    elif st.session_state.page == "attendance":
+        st.info("📸 Attendance feature coming next...")
+
+    elif st.session_state.page == "records":
+        st.info("📊 Attendance records coming next...")
+
+    footer_dashboard()
+
+
+# =========================
+# SUBJECTS PAGE
+# =========================
+def show_subjects(teacher_id):
+
+    if st.button("➕ Create Subject", key="create_sub"):
         create_subject_dialog(teacher_id)
 
     subjects = get_teacher_subjects(teacher_id) or []
@@ -117,9 +171,7 @@ def teacher_dashboard():
             code=sub.get("subject_code"),
             section=sub.get("section"),
             stats=[
-                ("Students", sub.get("total_students", 0)),
-                ("Classes", sub.get("total_classes", 0)),
+                ("👨‍🎓 Students", sub.get("total_students", 0)),
+                ("📅 Classes", sub.get("total_classes", 0)),
             ],
         )
-
-    footer_dashboard()
