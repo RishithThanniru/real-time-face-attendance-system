@@ -218,8 +218,6 @@ def login_teacher(username, password):
 def teacher_screen_login():
     st.markdown("<h1 style='text-align:center;'>Login</h1>", unsafe_allow_html=True)
 
-    st.image("https://i.ibb.co/4r5X1FY/apnacollege.png", width=90)
-
     if "show_password" not in st.session_state:
         st.session_state.show_password = False
 
@@ -243,20 +241,16 @@ def teacher_screen_login():
 
         st.markdown("###")
 
-        c1, c2 = st.columns(2)
-
-        with c1:
-            if st.button("Login", use_container_width=True):
-                if login_teacher(username, password):
-                    st.success("Logged in")
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials")
-
-        with c2:
-            if st.button("Register", use_container_width=True):
-                st.session_state.teacher_login_type = "register"
+        if st.button("Login", use_container_width=True):
+            if login_teacher(username, password):
+                st.success("Logged in")
                 st.rerun()
+            else:
+                st.error("Invalid credentials")
+
+        if st.button("Go to Register", use_container_width=True):
+            st.session_state.teacher_login_type = "register"
+            st.rerun()
 
 
 # =========================
@@ -264,8 +258,6 @@ def teacher_screen_login():
 # =========================
 def teacher_screen_register():
     st.markdown("<h1 style='text-align:center;'>Register</h1>", unsafe_allow_html=True)
-
-    st.image("https://i.ibb.co/4r5X1FY/apnacollege.png", width=90)
 
     if "show_password" not in st.session_state:
         st.session_state.show_password = False
@@ -291,19 +283,15 @@ def teacher_screen_register():
 
         st.markdown("###")
 
-        c1, c2 = st.columns(2)
-
-        with c1:
-            if st.button("Create Account", use_container_width=True):
-                if check_teacher_exists(username):
-                    st.error("Username already exists")
-                else:
-                    create_teacher(username, password, name)
-                    st.success("Account created!")
-                    st.session_state.teacher_login_type = "login"
-                    st.rerun()
-
-        with c2:
-            if st.button("Back to Login", use_container_width=True):
+        if st.button("Create Account", use_container_width=True):
+            if check_teacher_exists(username):
+                st.error("Username already exists")
+            else:
+                create_teacher(username, password, name)
+                st.success("Account created!")
                 st.session_state.teacher_login_type = "login"
                 st.rerun()
+
+        if st.button("Back to Login", use_container_width=True):
+            st.session_state.teacher_login_type = "login"
+            st.rerun()
