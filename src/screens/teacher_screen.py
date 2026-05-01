@@ -33,9 +33,13 @@ def teacher_screen():
     style_background_dashboard()
     style_base_layout()
 
+    # ✅ initialize toggle
+    if "teacher_login_type" not in st.session_state:
+        st.session_state.teacher_login_type = "login"
+
     if "teacher_data" in st.session_state:
         teacher_dashboard()
-    elif st.session_state.get("teacher_login_type", "login") == "login":
+    elif st.session_state.teacher_login_type == "login":
         teacher_screen_login()
     else:
         teacher_screen_register()
@@ -46,8 +50,7 @@ def teacher_screen():
 # =========================
 def teacher_dashboard():
     teacher_data = st.session_state.teacher_data
-
-    teacher_id = teacher_data.get("id")  # ✅ FIXED
+    teacher_id = teacher_data.get("id")
 
     if not teacher_id:
         st.error("❌ Teacher not logged in properly")
@@ -63,8 +66,6 @@ def teacher_dashboard():
         if st.button("Logout"):
             st.session_state.clear()
             st.rerun()
-
-    st.space()
 
     if "current_teacher_tab" not in st.session_state:
         st.session_state.current_teacher_tab = "take_attendance"
@@ -116,9 +117,8 @@ def teacher_tab_take_attendance(teacher_id):
     if "attendance_images" not in st.session_state:
         st.session_state.attendance_images = []
 
-    if st.session_state.attendance_images:
-        for img in st.session_state.attendance_images:
-            st.image(img)
+    for img in st.session_state.attendance_images:
+        st.image(img)
 
     if st.button("Run Face Analysis"):
         all_detected = {}
@@ -174,7 +174,7 @@ def teacher_tab_manage_subjects(teacher_id):
         st.info("No subjects found")
         return
 
-    for sub in subjects:   # ✅ FIXED LOOP
+    for sub in subjects:
         subject_card(
             name=sub["name"],
             code=sub["subject_code"],
@@ -224,12 +224,20 @@ def teacher_screen_login():
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
-    if st.button("Login"):
-        if login_teacher(username, password):
-            st.success("Logged in")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Login"):
+            if login_teacher(username, password):
+                st.success("Logged in")
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+
+    with col2:
+        if st.button("Register Instead"):
+            st.session_state.teacher_login_type = "register"
             st.rerun()
-        else:
-            st.error("Invalid credentials")
 
 
 # =========================
@@ -242,6 +250,19 @@ def teacher_screen_register():
     name = st.text_input("Name")
     password = st.text_input("Password", type="password")
 
-    if st.button("Register"):
-        create_teacher(username, password, name)
-        st.success("Registered! Login now")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Register"):
+            if check_teacher_exists(username):
+                st.error("Username already exists")
+            else:
+                create_teacher(username, password, name)
+                st.success("Registered successfully!")
+                st.session_state.teacher_login_type = "login"
+                st.rerun()
+
+    with col2:
+        if st.button("Login Instead"):
+            st.session_state.teacher_login_type = "login"
+            st.rerun()
