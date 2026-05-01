@@ -2,180 +2,124 @@ import streamlit as st
 from src.ui.base_layout import style_background_dashboard, style_base_layout
 from src.components.header import header_dashboard
 from src.components.footer import footer_dashboard
-from PIL import Image
-import numpy as np
-from src.pipelines.face_pipeline import predict_attendance, get_face_embeddings, train_classifier
-from src.pipelines.voice_pipeline import get_voice_embedding
-from src.database.db import get_all_students, create_student, get_student_subjects, get_student_attendance, unenroll_student_to_subject
-import time
 
-from src.components.dialog_enroll import enroll_dialog
+from src.database.db import (
+    check_teacher_exists,
+    create_teacher,
+    teacher_login,
+    get_teacher_subjects
+)
+
+from src.components.dialog_create_subject import create_subject_dialog
 from src.components.subject_card import subject_card
+
+
+# =========================
+# MAIN ENTRY
+# =========================
+def teacher_screen():
+    style_background_dashboard()
+    style_base_layout()
+
+    if "teacher_data" in st.session_state:
+        teacher_dashboard()
+    else:
+        teacher_auth()
+
+
+# =========================
+# LOGIN / REGISTER
+# =========================
+def teacher_auth():
+    if "auth_mode" not in st.session_state:
+        st.session_state.auth_mode = "login"
+
+    if st.session_state.auth_mode == "login":
+        teacher_login_ui()
+    else:
+        teacher_register_ui()
+
+
+def teacher_login_ui():
+    st.markdown("<h1 style='text-align:center;'>Teacher Login</h1>", unsafe_allow_html=True)
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        teacher = teacher_login(username, password)
+
+        if teacher:
+            st.session_state.teacher_data = teacher
+            st.success("Login successful")
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+
+    if st.button("Go to Register"):
+        st.session_state.auth_mode = "register"
+        st.rerun()
+
+
+def teacher_register_ui():
+    st.markdown("<h1 style='text-align:center;'>Teacher Register</h1>", unsafe_allow_html=True)
+
+    name = st.text_input("Name")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Create Account"):
+        if check_teacher_exists(username):
+            st.error("Username already exists")
+        else:
+            create_teacher(username, password, name)
+            st.success("Account created")
+            st.session_state.auth_mode = "login"
+            st.rerun()
+
+    if st.button("Back to Login"):
+        st.session_state.auth_mode = "login"
+        st.rerun()
 
 
 # =========================
 # DASHBOARD
 # =========================
-def student_dashboard():
-    student_data = st.session_state.student_data
-    student_id = student_data.get("id")  # ✅ FIX
+def teacher_dashboard():
+    teacher = st.session_state.teacher_data
+    teacher_id = teacher.get("id")
 
     c1, c2 = st.columns(2)
+
     with c1:
         header_dashboard()
+
     with c2:
-        st.subheader(f"Welcome, {student_data['name']}")
+        st.subheader(f"Welcome, {teacher.get('name')}")
         if st.button("Logout"):
             st.session_state.clear()
             st.rerun()
 
     st.divider()
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.header("Your Enrolled Subjects")
-    with c2:
-        if st.button("Enroll in Subject"):
-            enroll_dialog()
+    if st.button("Create Subject"):
+        create_subject_dialog(teacher_id)
 
-    with st.spinner("Loading subjects..."):
-        subjects = get_student_subjects(student_id) or []
-        logs = get_student_attendance(student_id) or []
+    subjects = get_teacher_subjects(teacher_id) or []
 
-    stats_map = {}
-
-    for log in logs:
-        sid = log.get("subject_id")
-
-        if sid not in stats_map:
-            stats_map[sid] = {"total": 0, "attended": 0}
-
-        stats_map[sid]["total"] += 1
-
-        if log.get("is_present"):
-            stats_map[sid]["attended"] += 1
-
-    cols = st.columns(2)
-
-    for i, sub_node in enumerate(subjects):
-        sub = sub_node.get("subjects", {})
-        sid = sub.get("id")  # ✅ FIX
-
-        stats = stats_map.get(sid, {"total": 0, "attended": 0})
-
-        def unenroll_button():
-            if st.button("Unenroll"):
-                unenroll_student_to_subject(student_id, sid)
-                st.toast(f"Unenrolled from {sub.get('name')} successfully!")
-                st.rerun()
-
-        with cols[i % 2]:
-            subject_card(
-                name=sub.get("name"),
-                code=sub.get("subject_code"),
-                section=sub.get("section"),
-                stats=[
-                    ("📅", "Total", stats["total"]),
-                    ("✅", "Attended", stats["attended"]),
-                ],
-                footer_callback=unenroll_button,
-            )
-
-    footer_dashboard()
-
-
-# =========================
-# MAIN SCREEN
-# =========================
-def student_screen():
-    style_background_dashboard()
-    style_base_layout()
-
-    if "student_data" in st.session_state:
-        student_dashboard()
+    if not subjects:
+        st.info("No subjects found")
         return
 
-    c1, c2 = st.columns(2)
-    with c1:
-        header_dashboard()
-    with c2:
-        if st.button("Go back"):
-            st.session_state.clear()
-            st.rerun()
-
-    st.header("Login using FaceID")
-
-    photo_source = st.camera_input("Capture your face")
-
-    show_registration = False
-
-    if photo_source:
-        img = np.array(Image.open(photo_source))
-
-        with st.spinner("Scanning..."):
-            detected, all_ids, num_faces = predict_attendance(img)
-
-            if num_faces == 0:
-                st.warning("No face found")
-
-            elif num_faces > 1:
-                st.warning("Multiple faces detected")
-
-            else:
-                if detected:
-                    student_id = list(detected.keys())[0]
-
-                    students = get_all_students() or []
-                    student = next((s for s in students if s.get("id") == student_id), None)
-
-                    if student:
-                        st.session_state.student_data = student
-                        st.success(f"Welcome {student['name']}")
-                        time.sleep(1)
-                        st.rerun()
-                else:
-                    st.info("New student detected")
-                    show_registration = True
-
-    # =========================
-    # REGISTER
-    # =========================
-    if show_registration:
-        st.subheader("Register")
-
-        new_name = st.text_input("Enter your name")
-
-        audio_data = None
-        try:
-            audio_data = st.audio_input("Record voice")
-        except:
-            pass
-
-        if st.button("Create Account"):
-            if not new_name:
-                st.warning("Enter name")
-                return
-
-            img = np.array(Image.open(photo_source))
-            encodings = get_face_embeddings(img)
-
-            if not encodings:
-                st.error("Face not captured")
-                return
-
-            face_emb = encodings[0].tolist()
-
-            voice_emb = None
-            if audio_data:
-                voice_emb = get_voice_embedding(audio_data.read())
-
-            res = create_student(new_name, face_embedding=face_emb, voice_embedding=voice_emb)
-
-            if res:
-                train_classifier()
-                st.session_state.student_data = res[0]
-                st.success("Profile created!")
-                time.sleep(1)
-                st.rerun()
+    for sub in subjects:
+        subject_card(
+            name=sub.get("name"),
+            code=sub.get("subject_code"),
+            section=sub.get("section"),
+            stats=[
+                ("Students", sub.get("total_students", 0)),
+                ("Classes", sub.get("total_classes", 0)),
+            ],
+        )
 
     footer_dashboard()
